@@ -5,6 +5,7 @@ from app.models.program import Program, ProgramDay, ProgramExercise
 from app.models.assignment import UserProgram
 from app.models.workout_log import WorkoutLog, WorkoutSetLog
 from app.models.pr import PersonalRecord
+from app.models.password_reset import PasswordResetToken
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "WorkoutLog",
     "WorkoutSetLog",
     "PersonalRecord",
+    "PasswordResetToken",
 ]

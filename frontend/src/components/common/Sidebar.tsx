@@ -11,7 +11,8 @@ import {
   LogOut,
   Flame,
   ShieldAlert,
-  FlameKindling
+  FlameKindling,
+  Shield
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 
@@ -122,6 +123,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <FlameKindling className="w-4 h-4" />
                 <span>Workout Levels</span>
+              </NavLink>
+              <NavLink
+                to="/admin/settings"
+                className={({ isActive }) =>
+                  `flex items-center space-x-3 px-3.5 py-2.5 rounded-xl font-medium text-sm transition ${
+                    isActive
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                      : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  }`
+                }
+              >
+                <Shield className="w-4 h-4" />
+                <span>Settings & Security</span>
               </NavLink>
             </>
           ) : (

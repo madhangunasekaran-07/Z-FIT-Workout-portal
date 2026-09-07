@@ -25,7 +25,12 @@ export const LoginPage: React.FC = () => {
         navigate('/');
       }
     } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Invalid email or password. Please try again.';
+      const errDetail = err.response?.data?.detail;
+      const msg = typeof errDetail === 'string'
+        ? errDetail
+        : Array.isArray(errDetail)
+        ? errDetail[0]?.msg || 'Validation error'
+        : 'Invalid email or password. Please try again.';
       setError(msg);
     } finally {
       setLoading(false);
@@ -99,13 +104,12 @@ export const LoginPage: React.FC = () => {
                 <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300">
                   Password
                 </label>
-                <button
-                  type="button"
-                  onClick={() => alert('Please contact the Z Fit administrator to reset your credentials.')}
-                  className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline"
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-emerald-400 hover:text-emerald-300 hover:underline transition"
                 >
                   Forgot password?
-                </button>
+                </Link>
               </div>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">

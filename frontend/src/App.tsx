@@ -10,6 +10,8 @@ import { AdminLayout } from './layouts/AdminLayout';
 // Auth Pages
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
+import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 
 // Customer Pages
 import { WorkoutDashboard } from './pages/customer/WorkoutDashboard';
@@ -24,6 +26,7 @@ import { CustomersPage } from './pages/admin/CustomersPage';
 import { ProgramsPage } from './pages/admin/ProgramsPage';
 import { ExercisesPage } from './pages/admin/ExercisesPage';
 import { LevelsPage } from './pages/admin/LevelsPage';
+import { AdminSettingsPage } from './pages/admin/AdminSettingsPage';
 
 export const App: React.FC = () => {
   return (
@@ -33,6 +36,8 @@ export const App: React.FC = () => {
           {/* Public Auth Routes */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
 
           {/* Customer Protected Routes */}
           <Route
@@ -64,6 +69,7 @@ export const App: React.FC = () => {
             <Route path="programs" element={<ProgramsPage />} />
             <Route path="exercises" element={<ExercisesPage />} />
             <Route path="levels" element={<LevelsPage />} />
+            <Route path="settings" element={<AdminSettingsPage />} />
           </Route>
 
           {/* Fallback */}
