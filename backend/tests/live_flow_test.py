@@ -1,9 +1,14 @@
-import httpx
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-BASE_URL = "http://127.0.0.1:8000/api"
+from fastapi.testclient import TestClient
+from app.main import app
+
+BASE_URL = "/api"
 
 def test_live_workflow():
-    client = httpx.Client(timeout=10.0)
+    client = TestClient(app)
     print("\n--- 1. Testing Customer Login ---")
     res = client.post(f"{BASE_URL}/auth/login", json={
         "email": "customer@zfit.com",

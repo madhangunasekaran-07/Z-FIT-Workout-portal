@@ -11,7 +11,7 @@ from app.models.level import Level
 from app.models.exercise import Exercise
 from app.models.program import Program, ProgramDay, ProgramExercise
 from app.models.assignment import UserProgram
-from app.models.workout_log import WorkoutLog
+from app.models.workout_log import WorkoutLog, WorkoutSetLog
 from app.models.pr import PersonalRecord
 from app.schemas.user import UserCreate, UserUpdate, CustomerDetailOut
 from app.schemas.exercise import ExerciseCreate, ExerciseUpdate, ExerciseOut, LevelCreate, LevelUpdate, LevelOut
@@ -23,8 +23,8 @@ from app.schemas.program import (
     AssignProgramRequest,
     ResetProgressRequest
 )
-from app.schemas.admin import AdminDashboardStatsOut, RecentActivityItem
-from app.services.progression import calculate_due_date_status, calculate_user_streaks
+from app.schemas.admin import AdminDashboardStatsOut, RecentActivityItem, AdminAnalyticsOut, PopularExerciseItem, ActiveCustomerItem, VolumeDataPoint
+from app.services.progression import calculate_due_date_status, calculate_user_streaks, calculate_workout_volume, calculate_streak_metrics
 
 router = APIRouter(prefix="/admin", tags=["Admin"], dependencies=[Depends(require_admin)])
 
@@ -634,3 +634,133 @@ def delete_exercise(exercise_id: int, db: Session = Depends(get_db)):
     ex.is_active = False
     db.commit()
     return {"message": "Exercise deactivated"}
+
+
+# ==================== ADMIN ANALYTICS ====================
+
+@router.get("/analytics", response_model=AdminAnalyticsOut)
+def get_admin_analytics(db: Session = Depends(get_db)):
+    """Aggregated gym analytics for admin. Does not expose private customer details to other customers."""
+    total_customers = db.query(User).filter(User.role == UserRole.CUSTOMER).count()
+    active_customers = db.query(User).filter(User.role == UserRole.CUSTOMER, User.is_active == True).count()
+
+    total_completed = db.query(WorkoutLog).count()
+
+    # Total scheduled workouts across all active assignments
+    total_scheduled = 0
+    assignments = db.query(UserProgram).all()
+    for a in assignments:
+        if a.program and a.program.days:
+            total_scheduled += len(a.program.days)
+
+    avg_completion = 0.0
+    if total_scheduled > 0:
+        avg_completion = round((total_completed / total_scheduled) * 100, 1)
+
+    # Total training volume
+    all_sets = db.query(WorkoutSetLog).all()
+    total_volume = calculate_workout_volume(all_sets)
+
+    # Most popular exercises by total sets logged
+    exercise_stats: dict = {}
+    for s in all_sets:
+        if s.exercise_id and s.is_completed:
+            if s.exercise_id not in exercise_stats:
+                exercise_stats[s.exercise_id] = {
+                    "exercise_id": s.exercise_id,
+                    "exercise_name": s.exercise_name,
+                    "muscle_group": "",
+                    "total_sets": 0,
+                    "total_volume_kg": 0.0,
+                    "athletes": set(),
+                }
+            exercise_stats[s.exercise_id]["total_sets"] += 1
+            if s.actual_weight_kg > 0 and s.actual_reps > 0:
+                exercise_stats[s.exercise_id]["total_volume_kg"] += s.actual_weight_kg * s.actual_reps
+            wl = s.workout_log
+            if wl:
+                exercise_stats[s.exercise_id]["athletes"].add(wl.user_id)
+
+    # Fill in muscle group from Exercise table
+    for ex_id, stats in exercise_stats.items():
+        ex = db.query(Exercise).filter(Exercise.id == ex_id).first()
+        if ex:
+            stats["muscle_group"] = ex.muscle_group
+
+    popular_exercises = sorted(
+        exercise_stats.values(), key=lambda x: x["total_sets"], reverse=True
+    )[:10]
+    popular_out = [
+        PopularExerciseItem(
+            exercise_id=e["exercise_id"],
+            exercise_name=e["exercise_name"],
+            muscle_group=e["muscle_group"],
+            total_sets=e["total_sets"],
+            total_volume_kg=round(e["total_volume_kg"], 2),
+            unique_athletes=len(e["athletes"]),
+        )
+        for e in popular_exercises
+    ]
+
+    # Most active customers (by workouts completed) - show athlete name only, no email
+    customers = db.query(User).filter(User.role == UserRole.CUSTOMER).all()
+    active_customer_list = []
+    for c in customers:
+        cust_logs = db.query(WorkoutLog).filter(WorkoutLog.user_id == c.id).all()
+        workouts_done = len(cust_logs)
+        if workouts_done == 0:
+            continue
+        cust_sets = []
+        for wl in cust_logs:
+            cust_sets.extend(wl.sets)
+        cust_volume = calculate_workout_volume(cust_sets)
+        streak_m = calculate_streak_metrics(db, c.id)
+        last_log = max(cust_logs, key=lambda l: l.completed_at, default=None)
+        last_active = last_log.completed_at.strftime("%b %d, %Y") if last_log else None
+        active_customer_list.append(
+            ActiveCustomerItem(
+                user_id=c.id,
+                athlete_name=c.full_name,
+                workouts_completed=workouts_done,
+                total_volume_kg=cust_volume,
+                current_streak=streak_m["current_streak"],
+                last_active_date=last_active,
+            )
+        )
+    active_customer_list.sort(key=lambda x: x.workouts_completed, reverse=True)
+    top_customers = active_customer_list[:10]
+
+    # Weekly volume trend (last 6 weeks)
+    today = date.today()
+    volume_trend = []
+    for w in range(6, 0, -1):
+        start_w = today - timedelta(days=w * 7)
+        end_w = today - timedelta(days=(w - 1) * 7)
+        week_logs = db.query(WorkoutLog).filter(
+            func.date(WorkoutLog.completed_at) >= start_w,
+            func.date(WorkoutLog.completed_at) < end_w,
+        ).all()
+        week_sets = []
+        for wl in week_logs:
+            week_sets.extend(wl.sets)
+        week_volume = calculate_workout_volume(week_sets)
+        week_workouts = len([wl for wl in week_logs if wl.day_type != "REST"])
+        volume_trend.append(
+            VolumeDataPoint(
+                period_label=f"Week {7 - w}",
+                volume_kg=week_volume,
+                workouts_count=week_workouts,
+            )
+        )
+
+    return AdminAnalyticsOut(
+        total_customers=total_customers,
+        active_customers=active_customers,
+        total_completed_workouts=total_completed,
+        total_scheduled_workouts=total_scheduled,
+        avg_completion_rate=avg_completion,
+        total_training_volume_kg=round(total_volume, 2),
+        popular_exercises=popular_out,
+        most_active_customers=top_customers,
+        weekly_volume_trend=volume_trend,
+    )

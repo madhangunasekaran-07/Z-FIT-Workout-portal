@@ -13,17 +13,42 @@ from app.schemas.workout import (
     CurrentWorkoutOut,
     WorkoutExerciseTarget,
     WorkoutCompletionRequest,
-    WorkoutLogOut
+    WorkoutCompletionResponse,
+    WorkoutLogOut,
 )
 from app.services.progression import (
     get_active_user_program,
     calculate_due_date_status,
     calculate_user_streaks,
+    calculate_workout_volume,
     advance_workout_progression,
-    advance_rest_day
+    advance_rest_day,
 )
 
 router = APIRouter(prefix="/workouts", tags=["Workouts"])
+
+
+def _enrich_log(log: WorkoutLog) -> WorkoutLogOut:
+    """Build a WorkoutLogOut with computed total_volume_kg and exercises_completed_count."""
+    volume = calculate_workout_volume(log.sets)
+    exercise_names = {s.exercise_name for s in log.sets if s.is_completed}
+    return WorkoutLogOut(
+        id=log.id,
+        user_id=log.user_id,
+        user_program_id=log.user_program_id,
+        program_day_id=log.program_day_id,
+        day_order_completed=log.day_order_completed,
+        day_name=log.day_name,
+        day_type=log.day_type,
+        started_at=log.started_at,
+        completed_at=log.completed_at,
+        duration_seconds=log.duration_seconds,
+        notes=log.notes,
+        sets=log.sets,
+        total_volume_kg=volume,
+        exercises_completed_count=len(exercise_names),
+    )
+
 
 @router.get("/current", response_model=CurrentWorkoutOut)
 def get_current_workout(
@@ -69,7 +94,7 @@ def get_current_workout(
 
     days_sorted = sorted(program.days, key=lambda d: d.day_order)
     total_days = len(days_sorted)
-    
+
     # Calculate days completed
     completed_days_count = db.query(WorkoutLog).filter(
         WorkoutLog.user_id == current_user.id,
@@ -151,7 +176,8 @@ def get_current_workout(
         notes=current_day.notes
     )
 
-@router.post("/complete")
+
+@router.post("/complete", response_model=WorkoutCompletionResponse)
 def complete_workout(
     completion_data: WorkoutCompletionRequest,
     current_user: User = Depends(get_current_user),
@@ -159,12 +185,21 @@ def complete_workout(
 ):
     try:
         result = advance_workout_progression(db, current_user, completion_data)
-        return result
+        return WorkoutCompletionResponse(
+            message=result["message"],
+            previous_day_order=result["previous_day_order"],
+            new_day_order=result["new_day_order"],
+            is_program_completed=result["is_program_completed"],
+            new_prs=result["new_prs"],
+            total_volume_kg=result["total_volume_kg"],
+            workout_log_id=result["workout_log_id"],
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
+
 
 @router.post("/advance-rest")
 def complete_rest_day(
@@ -180,6 +215,7 @@ def complete_rest_day(
             detail=str(e)
         )
 
+
 @router.get("/history", response_model=List[WorkoutLogOut])
 def get_workout_history(
     current_user: User = Depends(get_current_user),
@@ -191,7 +227,8 @@ def get_workout_history(
         .order_by(desc(WorkoutLog.completed_at))
         .all()
     )
-    return logs
+    return [_enrich_log(log) for log in logs]
+
 
 @router.get("/{log_id}", response_model=WorkoutLogOut)
 def get_workout_log_detail(
@@ -206,4 +243,4 @@ def get_workout_log_detail(
     )
     if not log:
         raise HTTPException(status_code=404, detail="Workout record not found")
-    return log
+    return _enrich_log(log)

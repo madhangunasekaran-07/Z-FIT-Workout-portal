@@ -8,7 +8,8 @@ from app.models.assignment import UserProgram
 from app.models.program import Program, ProgramDay
 from app.models.workout_log import WorkoutLog, WorkoutSetLog
 from app.models.pr import PersonalRecord
-from app.schemas.workout import WorkoutCompletionRequest
+from app.schemas.workout import WorkoutCompletionRequest, PRCelebrationOut
+
 
 def get_active_user_program(db: Session, user_id: int) -> Optional[UserProgram]:
     """Retrieve the primary active program assignment for the user."""
@@ -19,14 +20,15 @@ def get_active_user_program(db: Session, user_id: int) -> Optional[UserProgram]:
         .first()
     )
 
+
 def calculate_due_date_status(due_date: date, assignment_status: str) -> Tuple[int, str]:
     """Calculate remaining days and status tag: ACTIVE, DUE_SOON, EXPIRED, COMPLETED."""
     if assignment_status == "COMPLETED":
         return 0, "COMPLETED"
-    
+
     today = date.today()
     days_remaining = (due_date - today).days
-    
+
     if days_remaining < 0:
         return days_remaining, "EXPIRED"
     elif days_remaining <= 5:
@@ -34,9 +36,10 @@ def calculate_due_date_status(due_date: date, assignment_status: str) -> Tuple[i
     else:
         return days_remaining, "ACTIVE"
 
+
 def calculate_user_streaks(db: Session, user_id: int) -> Tuple[int, int]:
     """
-    Calculate current workout streak and longest workout streak based on workout completion history.
+    Calculate current workout streak and longest workout streak.
     A workout streak continues if workouts are within 2 days of each other (allowing for a rest day).
     """
     logs = (
@@ -55,7 +58,7 @@ def calculate_user_streaks(db: Session, user_id: int) -> Tuple[int, int]:
     today = date.today()
     current_streak = 0
     longest_streak = 0
-    
+
     # Calculate current streak: is most recent workout today or yesterday (or within 2 days)?
     if (today - unique_dates[0]).days <= 2:
         curr = 1
@@ -87,53 +90,185 @@ def calculate_user_streaks(db: Session, user_id: int) -> Tuple[int, int]:
 
     return current_streak, longest_streak
 
+
+def calculate_streak_metrics(db: Session, user_id: int) -> Dict[str, int]:
+    """
+    Return full streak metrics: current streak, longest streak,
+    total completed workouts, workouts this week, workouts this month.
+    """
+    logs = (
+        db.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user_id)
+        .order_by(desc(WorkoutLog.completed_at))
+        .all()
+    )
+
+    current_streak, longest_streak = calculate_user_streaks(db, user_id)
+    total_completed = len(logs)
+
+    today = date.today()
+    # Workouts this week (Monday to Sunday)
+    week_start = today - timedelta(days=today.weekday())
+    workouts_this_week = sum(
+        1 for log in logs if log.completed_at.date() >= week_start
+    )
+    # Workouts this month
+    month_start = today.replace(day=1)
+    workouts_this_month = sum(
+        1 for log in logs if log.completed_at.date() >= month_start
+    )
+
+    return {
+        "current_streak": current_streak,
+        "longest_streak": longest_streak,
+        "total_completed_workouts": total_completed,
+        "workouts_this_week": workouts_this_week,
+        "workouts_this_month": workouts_this_month,
+    }
+
+
+def calculate_workout_volume(sets: List[WorkoutSetLog]) -> float:
+    """
+    Calculate total training volume for a list of set logs.
+    Volume = Weight × Reps, only for completed sets with valid positive values.
+    """
+    total = 0.0
+    for s in sets:
+        if s.is_completed and s.actual_weight_kg > 0 and s.actual_reps > 0:
+            total += s.actual_weight_kg * s.actual_reps
+    return round(total, 2)
+
+
+def calculate_estimated_1rm(weight_kg: float, reps: int) -> float:
+    """
+    Epley formula for estimated one-rep max.
+    1RM = weight * (1 + reps / 30)
+    For reps == 1, 1RM is the weight itself.
+    """
+    if reps <= 0 or weight_kg <= 0:
+        return 0.0
+    if reps == 1:
+        return round(weight_kg, 2)
+    return round(weight_kg * (1 + reps / 30.0), 2)
+
+
 def process_personal_records(
     db: Session,
     user_id: int,
     workout_log_id: int,
     set_logs: List[WorkoutSetLog]
-) -> List[PersonalRecord]:
-    """Check if any completed set sets a new Personal Record for weight or reps."""
-    new_prs = []
+) -> List[PRCelebrationOut]:
+    """
+    Check if any completed set sets a new Personal Record.
+    Tracks maximum weight, maximum reps at given weight, and estimated 1RM.
+    Returns list of PR celebration objects with previous and new values.
+    """
+    new_prs: List[PRCelebrationOut] = []
     now = datetime.now(timezone.utc)
+    # Track best per exercise within this session to avoid false multi-set PRs
+    session_best: Dict[int, Tuple[float, int]] = {}
 
     for s in set_logs:
-        if not s.is_completed or not s.exercise_id or s.actual_weight_kg <= 0:
+        if not s.is_completed or not s.exercise_id:
             continue
+        # Reject invalid/incomplete data
+        if s.actual_weight_kg <= 0 or s.actual_reps <= 0:
+            continue
+
+        ex_id = s.exercise_id
+        new_weight = s.actual_weight_kg
+        new_reps = s.actual_reps
+        new_1rm = calculate_estimated_1rm(new_weight, new_reps)
+
+        # Only use the best performance per exercise within this session
+        if ex_id in session_best:
+            prev_w, prev_r = session_best[ex_id]
+            prev_1rm = calculate_estimated_1rm(prev_w, prev_r)
+            if new_1rm <= prev_1rm:
+                continue
+        session_best[ex_id] = (new_weight, new_reps)
+
+    # Now compare session bests against stored PRs
+    for ex_id, (new_weight, new_reps) in session_best.items():
+        new_1rm = calculate_estimated_1rm(new_weight, new_reps)
 
         existing_pr = (
             db.query(PersonalRecord)
             .filter(
                 PersonalRecord.user_id == user_id,
-                PersonalRecord.exercise_id == s.exercise_id
+                PersonalRecord.exercise_id == ex_id
             )
             .first()
         )
 
         is_new_pr = False
+        prev_weight_kg = None
+        prev_reps = None
+        pr_type = "MAX_WEIGHT"
+
         if not existing_pr:
-            new_pr = PersonalRecord(
+            is_new_pr = True
+            new_pr_obj = PersonalRecord(
                 user_id=user_id,
-                exercise_id=s.exercise_id,
-                weight_kg=s.actual_weight_kg,
-                reps=s.actual_reps,
+                exercise_id=ex_id,
+                weight_kg=new_weight,
+                reps=new_reps,
+                previous_weight_kg=None,
+                previous_reps=None,
+                estimated_1rm=new_1rm,
+                pr_type="MAX_WEIGHT",
                 achieved_at=now,
                 workout_log_id=workout_log_id
             )
-            db.add(new_pr)
-            new_prs.append(new_pr)
+            db.add(new_pr_obj)
         else:
-            # Better if weight is strictly higher, or same weight with more reps
-            if (s.actual_weight_kg > existing_pr.weight_kg) or (
-                s.actual_weight_kg == existing_pr.weight_kg and s.actual_reps > existing_pr.reps
-            ):
-                existing_pr.weight_kg = s.actual_weight_kg
-                existing_pr.reps = s.actual_reps
+            existing_1rm = calculate_estimated_1rm(existing_pr.weight_kg, existing_pr.reps)
+            # Check if this is genuinely a new PR
+            if new_weight > existing_pr.weight_kg:
+                pr_type = "MAX_WEIGHT"
+                is_new_pr = True
+            elif new_weight == existing_pr.weight_kg and new_reps > existing_pr.reps:
+                pr_type = "MAX_REPS"
+                is_new_pr = True
+            elif new_1rm > existing_1rm:
+                pr_type = "ESTIMATED_1RM"
+                is_new_pr = True
+
+            if is_new_pr:
+                prev_weight_kg = existing_pr.weight_kg
+                prev_reps = existing_pr.reps
+                existing_pr.previous_weight_kg = existing_pr.weight_kg
+                existing_pr.previous_reps = existing_pr.reps
+                existing_pr.weight_kg = new_weight
+                existing_pr.reps = new_reps
+                existing_pr.estimated_1rm = new_1rm
+                existing_pr.pr_type = pr_type
                 existing_pr.achieved_at = now
                 existing_pr.workout_log_id = workout_log_id
-                new_prs.append(existing_pr)
+
+        if is_new_pr:
+            # Get exercise name for the celebration
+            set_for_exercise = next(
+                (s for s in set_logs if s.exercise_id == ex_id), None
+            )
+            exercise_name = set_for_exercise.exercise_name if set_for_exercise else "Exercise"
+
+            new_prs.append(
+                PRCelebrationOut(
+                    exercise_id=ex_id,
+                    exercise_name=exercise_name,
+                    weight_kg=new_weight,
+                    reps=new_reps,
+                    previous_weight_kg=prev_weight_kg,
+                    previous_reps=prev_reps,
+                    estimated_1rm=new_1rm,
+                    pr_type=pr_type,
+                    achieved_at=now,
+                )
+            )
 
     return new_prs
+
 
 def advance_workout_progression(
     db: Session,
@@ -143,9 +278,10 @@ def advance_workout_progression(
     """
     CRITICAL BUSINESS RULE:
     1. Records the user's workout completion into WorkoutLog and WorkoutSetLog.
-    2. Identifies and updates Personal Records (PRs).
-    3. Advances current_day_order strictly to the next sequence item.
-    4. Progression is never triggered by calendar days.
+    2. Identifies and updates Personal Records (PRs) with previous comparisons.
+    3. Calculates total training volume for this session.
+    4. Advances current_day_order strictly to the next sequence item.
+    5. Progression is never triggered by calendar days.
     """
     assignment = get_active_user_program(db, user.id)
     if not assignment:
@@ -197,12 +333,16 @@ def advance_workout_progression(
             actual_weight_kg=s.actual_weight_kg,
             actual_reps=s.actual_reps,
             is_completed=s.is_completed,
+            rpe=s.rpe,
             notes=s.notes
         )
         db.add(set_log)
         set_records.append(set_log)
 
     db.flush()
+
+    # Calculate total volume
+    total_volume_kg = calculate_workout_volume(set_records)
 
     # Track Personal Records
     new_prs = process_personal_records(db, user.id, workout_log.id, set_records)
@@ -214,7 +354,6 @@ def advance_workout_progression(
         .order_by(ProgramDay.day_order)
         .all()
     )
-    total_days = len(days_in_program)
     max_day_order = max([d.day_order for d in days_in_program]) if days_in_program else 1
 
     next_order = assignment.current_day_order + 1
@@ -235,9 +374,11 @@ def advance_workout_progression(
         "previous_day_order": workout_log.day_order_completed,
         "new_day_order": assignment.current_day_order,
         "is_program_completed": is_program_completed,
-        "new_prs_count": len(new_prs),
-        "workout_log_id": workout_log.id
+        "new_prs": new_prs,
+        "total_volume_kg": total_volume_kg,
+        "workout_log_id": workout_log.id,
     }
+
 
 def advance_rest_day(db: Session, user: User) -> Dict[str, Any]:
     """Advance past a scheduled Rest Day to the next workout day in sequence."""

@@ -35,6 +35,7 @@ class WorkoutSetLog(Base):
     actual_weight_kg = Column(Float, default=0.0, nullable=False)
     actual_reps = Column(Integer, default=0, nullable=False)
     is_completed = Column(Boolean, default=True, nullable=False)
+    rpe = Column(Float, nullable=True)
     notes = Column(Text, nullable=True)
 
     workout_log = relationship("WorkoutLog", back_populates="sets")

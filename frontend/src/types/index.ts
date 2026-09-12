@@ -121,6 +121,7 @@ export interface SetLogInput {
   actual_weight_kg: number;
   actual_reps: number;
   is_completed: boolean;
+  rpe?: number | null;
   notes?: string;
 }
 
@@ -134,6 +135,7 @@ export interface WorkoutSetLog {
   actual_weight_kg: number;
   actual_reps: number;
   is_completed: boolean;
+  rpe?: number | null;
   notes?: string;
 }
 
@@ -148,6 +150,30 @@ export interface WorkoutLog {
   duration_seconds: number;
   notes?: string;
   sets: WorkoutSetLog[];
+  total_volume_kg: number;
+  exercises_completed_count: number;
+}
+
+export interface PRCelebration {
+  exercise_id: number;
+  exercise_name: string;
+  weight_kg: number;
+  reps: number;
+  previous_weight_kg?: number | null;
+  previous_reps?: number | null;
+  estimated_1rm: number;
+  pr_type: string;
+  achieved_at: string;
+}
+
+export interface WorkoutCompletionResponse {
+  message: string;
+  previous_day_order: number;
+  new_day_order: number;
+  is_program_completed: boolean;
+  new_prs: PRCelebration[];
+  total_volume_kg: number;
+  workout_log_id: number;
 }
 
 export interface PersonalRecord {
@@ -156,6 +182,10 @@ export interface PersonalRecord {
   exercise_name: string;
   weight_kg: number;
   reps: number;
+  previous_weight_kg?: number | null;
+  previous_reps?: number | null;
+  estimated_1rm?: number | null;
+  pr_type: string;
   achieved_at: string;
 }
 
@@ -177,6 +207,54 @@ export interface ConsistencyDataPoint {
   workouts_count: number;
 }
 
+export interface VolumeDataPoint {
+  period_label: string;
+  volume_kg: number;
+  workouts_count: number;
+}
+
+export interface ExerciseProgressionPoint {
+  date_label: string;
+  date: string;
+  weight_kg: number;
+  reps: number;
+  volume_kg: number;
+  estimated_1rm: number;
+  workout_name: string;
+  is_pr: boolean;
+}
+
+export interface ExerciseHistorySession {
+  log_id: number;
+  date: string;
+  date_label: string;
+  workout_name: string;
+  day_type: string;
+  sets_count: number;
+  best_weight_kg: number;
+  best_reps: number;
+  total_volume_kg: number;
+  is_pr: boolean;
+}
+
+export interface ExerciseHistoryOut {
+  exercise_id: number;
+  exercise_name: string;
+  muscle_group?: string;
+  equipment?: string;
+  sessions_count: number;
+  current_pr?: PersonalRecord | null;
+  progression_points: ExerciseProgressionPoint[];
+  sessions: ExerciseHistorySession[];
+}
+
+export interface LoggedExercise {
+  exercise_id: number;
+  exercise_name: string;
+  muscle_group?: string;
+  equipment?: string;
+}
+
 export interface ProgressStats {
   has_assignment: boolean;
   program_name?: string;
@@ -188,6 +266,9 @@ export interface ProgressStats {
   current_workout_day: number;
   current_streak: number;
   longest_streak: number;
+  workouts_this_week: number;
+  workouts_this_month: number;
+  total_training_volume_kg: number;
   due_date?: string;
   days_remaining?: number;
   status: string;
@@ -195,6 +276,7 @@ export interface ProgressStats {
   completion_chart: CompletionDataPoint[];
   strength_chart: StrengthDataPoint[];
   consistency_chart: ConsistencyDataPoint[];
+  volume_chart: VolumeDataPoint[];
   recent_history: WorkoutLog[];
 }
 
@@ -239,4 +321,34 @@ export interface AdminDashboardStats {
   completed_workouts_today: number;
   programs_expiring_soon: number;
   recent_activities: RecentActivityItem[];
+}
+
+export interface PopularExercise {
+  exercise_id: number;
+  exercise_name: string;
+  muscle_group: string;
+  total_sets: number;
+  total_volume_kg: number;
+  unique_athletes: number;
+}
+
+export interface ActiveCustomer {
+  user_id: number;
+  athlete_name: string;
+  workouts_completed: number;
+  total_volume_kg: number;
+  current_streak: number;
+  last_active_date?: string;
+}
+
+export interface AdminAnalytics {
+  total_customers: number;
+  active_customers: number;
+  total_completed_workouts: number;
+  total_scheduled_workouts: number;
+  avg_completion_rate: number;
+  total_training_volume_kg: number;
+  popular_exercises: PopularExercise[];
+  most_active_customers: ActiveCustomer[];
+  weekly_volume_trend: VolumeDataPoint[];
 }

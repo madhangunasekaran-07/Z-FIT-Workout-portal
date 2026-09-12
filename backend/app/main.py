@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.database.base import Base
 from app.database.session import engine, SessionLocal
+from app.database.migrations import run_migrations
 from app.services.seed import seed_database
 # Import models to ensure all metadata is registered
 import app.models  # noqa: F401
@@ -17,8 +18,9 @@ from app.api.admin import router as admin_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Create tables if not exist and seed data
+    # Startup: Create tables if not exist, run migrations, and seed data
     Base.metadata.create_all(bind=engine)
+    run_migrations(engine)
     db = SessionLocal()
     try:
         seed_database(db)

@@ -12,10 +12,14 @@ import {
   Trophy,
   AlertTriangle,
   RotateCw,
-  Target
+  Target,
+  Zap,
+  BarChart3,
+  Award,
+  TrendingUp,
 } from 'lucide-react';
 import { Header } from '../../components/common/Header';
-import { CurrentWorkout } from '../../types';
+import { CurrentWorkout, ProgressStats } from '../../types';
 import api from '../../api/client';
 import confetti from 'canvas-confetti';
 
@@ -28,6 +32,7 @@ interface OutletContextType {
 export const WorkoutDashboard: React.FC = () => {
   const { onOpenRestTimer, refreshWorkout } = useOutletContext<OutletContextType>();
   const [workout, setWorkout] = useState<CurrentWorkout | null>(null);
+  const [progress, setProgress] = useState<ProgressStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [advancingRest, setAdvancingRest] = useState(false);
   const navigate = useNavigate();
@@ -35,8 +40,12 @@ export const WorkoutDashboard: React.FC = () => {
   const fetchWorkout = async () => {
     setLoading(true);
     try {
-      const res = await api.get<CurrentWorkout>('/workouts/current');
-      setWorkout(res.data);
+      const [wRes, pRes] = await Promise.all([
+        api.get<CurrentWorkout>('/workouts/current'),
+        api.get<ProgressStats>('/progress').catch(() => null),
+      ]);
+      setWorkout(wRes.data);
+      if (pRes) setProgress(pRes.data);
     } catch (err) {
       console.error(err);
     } finally {
@@ -281,8 +290,8 @@ export const WorkoutDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Secondary Metric Cards Grid (Progress, Due Date, Days Remaining) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* Secondary Metric Cards Grid (Progress, Streak, Volume, Due Date) */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Program Progress Card */}
               <div className="glass-card rounded-2xl p-5 border border-white/5">
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -308,34 +317,47 @@ export const WorkoutDashboard: React.FC = () => {
                 </div>
               </div>
 
-              {/* Due Date Card */}
+              {/* Streak Card */}
               <div className="glass-card rounded-2xl p-5 border border-white/5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Due Date
-                </span>
-                <div className="flex items-center space-x-2 mt-2">
-                  <Calendar className="w-5 h-5 text-cyan-400" />
-                  <span className="text-lg font-bold text-white">
-                    {workout.due_date
-                      ? new Date(workout.due_date).toLocaleDateString('en-US', {
-                          day: 'numeric',
-                          month: 'long',
-                          year: 'numeric',
-                        })
-                      : 'Not set'}
-                  </span>
+                <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  <span>Workout Streak</span>
+                  <Flame className="w-4 h-4 text-amber-400 animate-pulse" />
                 </div>
-                <p className="text-xs text-slate-400 mt-3">
-                  Sequence pace is based on your completions, not the calendar.
-                </p>
+                <div className="flex items-baseline space-x-1.5 mt-2">
+                  <span className="text-3xl font-black font-heading text-amber-400">
+                    {progress?.current_streak ?? workout.current_streak}
+                  </span>
+                  <span className="text-sm font-semibold text-slate-400">Days</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-3 font-medium">
+                  Longest: <strong className="text-white font-bold">{progress?.longest_streak ?? workout.current_streak} days</strong>
+                </div>
               </div>
 
-              {/* Days Remaining Card */}
+              {/* Total Training Volume */}
               <div className="glass-card rounded-2xl p-5 border border-white/5">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                  Days Remaining
-                </span>
-                <div className="flex items-baseline space-x-2 mt-2">
+                <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  <span>Total Volume</span>
+                  <Zap className="w-4 h-4 text-violet-400" />
+                </div>
+                <div className="flex items-baseline space-x-1.5 mt-2">
+                  <span className="text-2xl sm:text-3xl font-black font-heading text-violet-400">
+                    {(progress?.total_training_volume_kg || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">kg</span>
+                </div>
+                <div className="text-[11px] text-slate-400 mt-3 font-medium">
+                  This week: <strong className="text-emerald-400">{progress?.workouts_this_week || 0} sessions</strong>
+                </div>
+              </div>
+
+              {/* Due Date & Days Remaining */}
+              <div className="glass-card rounded-2xl p-5 border border-white/5">
+                <div className="flex items-center justify-between text-slate-400 text-xs font-bold uppercase tracking-wider">
+                  <span>Schedule Pace</span>
+                  <Calendar className="w-4 h-4 text-cyan-400" />
+                </div>
+                <div className="flex items-baseline space-x-1.5 mt-2">
                   <span
                     className={`text-3xl font-black font-heading ${
                       workout.days_remaining !== undefined && workout.days_remaining <= 5
@@ -345,9 +367,9 @@ export const WorkoutDashboard: React.FC = () => {
                   >
                     {workout.days_remaining !== undefined ? Math.max(0, workout.days_remaining) : 0}
                   </span>
-                  <span className="text-sm font-semibold text-slate-400">days</span>
+                  <span className="text-sm font-semibold text-slate-400">days left</span>
                 </div>
-                <div className="mt-3">
+                <div className="mt-2.5">
                   <span
                     className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
                       workout.assignment_status === 'ACTIVE'
@@ -360,6 +382,109 @@ export const WorkoutDashboard: React.FC = () => {
                     {workout.assignment_status || 'ACTIVE'}
                   </span>
                 </div>
+              </div>
+            </div>
+
+            {/* Bottom Section: PR Highlights & Recent Activity */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Personal Records Highlight Card */}
+              <div className="glass-card rounded-2xl p-5 border border-white/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white font-heading flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span>Personal Records Highlight</span>
+                  </h3>
+                  <button
+                    onClick={() => navigate('/progress')}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
+                  >
+                    <span>Full Analytics</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {progress?.personal_records && progress.personal_records.length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {progress.personal_records.slice(0, 4).map((pr) => (
+                      <div
+                        key={pr.id}
+                        className="p-3 rounded-xl bg-dark-900 border border-white/5 flex items-center justify-between"
+                      >
+                        <div>
+                          <div className="text-xs font-bold text-white">{pr.exercise_name}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{pr.reps} reps</div>
+                        </div>
+                        <div className="text-right">
+                          <div className="text-sm font-black text-amber-400">{pr.weight_kg} kg</div>
+                          {pr.estimated_1rm && (
+                            <div className="text-[9px] text-slate-500">~{pr.estimated_1rm.toFixed(0)} 1RM</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-slate-500">
+                    Complete your first workout to establish personal records.
+                  </div>
+                )}
+              </div>
+
+              {/* Recent Workout Activity Card */}
+              <div className="glass-card rounded-2xl p-5 border border-white/5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white font-heading flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-cyan-400" />
+                    <span>Recent Workout Activity</span>
+                  </h3>
+                  <button
+                    onClick={() => navigate('/progress')}
+                    className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold flex items-center gap-1"
+                  >
+                    <span>History</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+
+                {progress?.recent_history && progress.recent_history.length > 0 ? (
+                  <div className="space-y-2">
+                    {progress.recent_history.slice(0, 3).map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-3 rounded-xl bg-dark-900 border border-white/5 flex items-center justify-between"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black ${
+                            log.day_type === 'REST' ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-400'
+                          }`}>
+                            D{log.day_order_completed}
+                          </div>
+                          <div>
+                            <div className="text-xs font-bold text-white">{log.day_name}</div>
+                            <div className="text-[10px] text-slate-400">
+                              {new Date(log.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                              {log.duration_seconds > 0 ? ` • ${Math.round(log.duration_seconds / 60)} min` : ''}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          {log.total_volume_kg > 0 && (
+                            <div className="text-xs font-bold text-violet-400">
+                              {log.total_volume_kg.toFixed(0)} kg
+                            </div>
+                          )}
+                          <div className="text-[10px] text-slate-500">
+                            {log.exercises_completed_count} exercises
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="py-6 text-center text-xs text-slate-500">
+                    No workout sessions recorded yet. Start today's workout above!
+                  </div>
+                )}
               </div>
             </div>
           </div>
