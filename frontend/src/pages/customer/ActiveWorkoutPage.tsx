@@ -67,7 +67,7 @@ export const ActiveWorkoutPage: React.FC = () => {
     const fetchCurrent = async () => {
       try {
         const res = await api.get<CurrentWorkout>('/workouts/current');
-        if (!res.data.has_assignment || res.data.is_rest_day) {
+        if (!res.data.has_assignment || res.data.is_rest_day || res.data.is_program_completed) {
           navigate('/');
           return;
         }

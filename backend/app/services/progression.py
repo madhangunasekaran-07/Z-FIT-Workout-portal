@@ -284,24 +284,26 @@ def advance_workout_progression(
     5. Progression is never triggered by calendar days.
     """
     assignment = get_active_user_program(db, user.id)
-    if not assignment:
+    if not assignment or assignment.status != "ACTIVE":
         raise ValueError("User does not have an active workout program assigned.")
 
     program = db.query(Program).filter(Program.id == assignment.program_id).first()
     if not program:
         raise ValueError("Assigned program not found.")
 
+    day_order_to_complete = completion_data.day_order or assignment.current_day_order
+
     # Find the current program day
     current_day = (
         db.query(ProgramDay)
         .filter(
             ProgramDay.program_id == program.id,
-            ProgramDay.day_order == assignment.current_day_order
+            ProgramDay.day_order == day_order_to_complete
         )
         .first()
     )
 
-    day_name = current_day.name if current_day else f"Day {assignment.current_day_order}"
+    day_name = current_day.name if current_day else f"Day {day_order_to_complete}"
     day_type = current_day.day_type if current_day else "WORKOUT"
 
     now = datetime.now(timezone.utc)
@@ -309,7 +311,7 @@ def advance_workout_progression(
         user_id=user.id,
         user_program_id=assignment.id,
         program_day_id=current_day.id if current_day else None,
-        day_order_completed=assignment.current_day_order,
+        day_order_completed=day_order_to_complete,
         day_name=day_name,
         day_type=day_type,
         started_at=now - timedelta(seconds=completion_data.duration_seconds or 1800),

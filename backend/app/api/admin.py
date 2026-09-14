@@ -332,14 +332,17 @@ def assign_program(user_id: int, req: AssignProgramRequest, db: Session = Depend
 def reset_customer_progress(user_id: int, req: ResetProgressRequest, db: Session = Depends(get_db)):
     assignment = (
         db.query(UserProgram)
-        .filter(UserProgram.user_id == user_id, UserProgram.status == "ACTIVE")
+        .filter(UserProgram.user_id == user_id)
         .order_by(desc(UserProgram.assigned_at))
         .first()
     )
     if not assignment:
-        raise HTTPException(status_code=404, detail="No active program assignment found to reset")
+        raise HTTPException(status_code=404, detail="No program assignment found to reset")
 
     assignment.current_day_order = req.new_day_order
+    if assignment.status == "COMPLETED":
+        assignment.status = "ACTIVE"
+        assignment.completed_at = None
     db.commit()
     return {
         "message": f"Customer progress reset to Day {req.new_day_order}.",

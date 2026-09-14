@@ -92,6 +92,7 @@ export interface WorkoutExerciseTarget {
 
 export interface CurrentWorkout {
   has_assignment: boolean;
+  is_program_completed?: boolean;
   program_id?: number;
   program_name?: string;
   level_name?: string;
@@ -352,3 +353,93 @@ export interface AdminAnalytics {
   most_active_customers: ActiveCustomer[];
   weekly_volume_trend: VolumeDataPoint[];
 }
+
+// ============================================================
+// Phase 3 — ML Types
+// ============================================================
+
+export interface MLHistoricalPoint {
+  session_index: number;
+  date: string;
+  weight_kg: number;
+  reps: number;
+  estimated_1rm: number;
+  volume_kg: number;
+}
+
+export interface MLProgressPrediction {
+  exercise_id: number;
+  exercise_name: string;
+  current_weight_kg: number;
+  predicted_weight_kg: number;
+  predicted_reps: number;
+  confidence: number;
+  trend: 'improving' | 'stagnant' | 'declining';
+  is_ml_prediction: boolean;
+  explanation: string;
+  historical_points: MLHistoricalPoint[];
+  predicted_point: MLHistoricalPoint | null;
+}
+
+export interface MLRecommendation {
+  exercise_id: number;
+  exercise_name: string;
+  current_weight_kg: number;
+  recommended_weight_kg: number;
+  recommended_reps_min: number;
+  recommended_reps_max: number;
+  target_sets: number;
+  reason: string;
+  confidence: number;
+  progression_type: 'conservative_increase' | 'maintain' | 'recovery';
+  is_ml_recommendation: boolean;
+}
+
+export interface MLPlateauInsight {
+  exercise_id: number;
+  exercise_name: string;
+  sessions_stagnant: number;
+  status: string;
+  message: string;
+  suggestion: string;
+}
+
+export interface MLFatigueSignal {
+  detected: boolean;
+  status: string;
+  severity: 'none' | 'mild' | 'moderate' | 'high';
+  message: string;
+  drop_percentage: number;
+}
+
+export interface MLInsightCard {
+  id: string;
+  type: string;
+  title: string;
+  description: string;
+  badge: string;
+  severity: 'info' | 'success' | 'warning' | 'caution';
+}
+
+export interface MLDashboardResponse {
+  data_sufficient: boolean;
+  completed_sessions_count: number;
+  min_sessions_required: number;
+  message: string;
+  predictions: MLProgressPrediction[];
+  recommendations: MLRecommendation[];
+  insights: MLInsightCard[];
+  plateaus: MLPlateauInsight[];
+  fatigue_signal: MLFatigueSignal;
+}
+
+export interface AdminMLAnalytics {
+  total_active_customers: number;
+  average_progress_rate_pct: number;
+  customers_improving_count: number;
+  customers_plateaued_count: number;
+  customers_fatigued_count: number;
+  average_completion_rate_pct: number;
+  summary_insights: string[];
+}
+

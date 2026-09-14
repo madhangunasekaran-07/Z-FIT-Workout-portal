@@ -110,27 +110,67 @@ export const WorkoutDashboard: React.FC = () => {
             <div className="w-10 h-10 border-4 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin" />
             <p className="text-slate-400 text-sm font-medium">Fetching scheduled workout sequence...</p>
           </div>
-        ) : !workout?.has_assignment ? (
-          /* Empty state: No active assignment */
-          <div className="glass-card rounded-2xl p-8 md:p-12 text-center border border-white/10 max-w-xl mx-auto my-12">
-            <div className="w-16 h-16 rounded-2xl bg-dark-800 border border-white/10 flex items-center justify-center mx-auto mb-4 text-slate-400">
-              <Dumbbell className="w-8 h-8" />
-            </div>
-            <h3 className="text-xl font-black text-white font-heading">
-              {workout?.assignment_status === 'COMPLETED' ? 'Program Completed!' : 'No Workout Assigned'}
-            </h3>
-            <p className="text-sm text-slate-400 mt-2 leading-relaxed">
-              {workout?.notes || 'Your administrator or coach has not assigned an active workout program to your account yet.'}
-            </p>
-            <div className="mt-6 flex justify-center">
-              <button
-                onClick={fetchWorkout}
-                className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 text-sm font-semibold transition"
-              >
-                <RotateCw className="w-4 h-4" />
-                <span>Check Updates</span>
-              </button>
-            </div>
+        ) : !workout?.has_assignment || workout?.is_program_completed || workout?.assignment_status === 'COMPLETED' ? (
+          /* Empty or Completed state */
+          <div className="glass-card rounded-2xl p-8 md:p-12 text-center border border-white/10 max-w-xl mx-auto my-12 relative overflow-hidden">
+            {workout?.is_program_completed || workout?.assignment_status === 'COMPLETED' ? (
+              <>
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4 text-emerald-400">
+                  <Trophy className="w-8 h-8 text-emerald-400" />
+                </div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider mb-2">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Program Completed
+                </div>
+                <h3 className="text-2xl font-black text-white font-heading">
+                  Congratulations!
+                </h3>
+                <p className="text-sm text-slate-300 mt-2 leading-relaxed max-w-md mx-auto">
+                  {workout?.notes || `You have completed all ${workout?.total_program_days || 0} scheduled days of ${workout?.program_name || 'your program'}!`}
+                </p>
+                <div className="mt-4 text-xs text-slate-400">
+                  Review your progression in <span className="text-emerald-400 font-semibold cursor-pointer underline" onClick={() => navigate('/progress')}>Progress Analytics</span> or contact your coach for your next split.
+                </div>
+                <div className="mt-6 flex justify-center gap-3">
+                  <button
+                    onClick={() => navigate('/progress')}
+                    className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition shadow-glow-brand"
+                  >
+                    <span>View Progress &amp; PRs</span>
+                    <ArrowRight className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={fetchWorkout}
+                    className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 text-xs font-semibold border border-white/10 transition"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 rounded-2xl bg-dark-800 border border-white/10 flex items-center justify-center mx-auto mb-4 text-slate-400">
+                  <Dumbbell className="w-8 h-8" />
+                </div>
+                <h3 className="text-xl font-black text-white font-heading">
+                  No Workout Assigned
+                </h3>
+                <p className="text-sm text-slate-400 mt-2 leading-relaxed">
+                  {workout?.notes || 'Your administrator or coach has not assigned an active workout program to your account yet.'}
+                </p>
+                <div className="mt-6 flex justify-center">
+                  <button
+                    onClick={fetchWorkout}
+                    className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-dark-800 hover:bg-dark-700 text-slate-200 text-sm font-semibold transition"
+                  >
+                    <RotateCw className="w-4 h-4" />
+                    <span>Check Updates</span>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         ) : workout.is_rest_day ? (
           /* REST DAY VIEW (Section 8) */

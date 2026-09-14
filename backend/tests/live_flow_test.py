@@ -29,6 +29,56 @@ def test_live_workflow():
     print(f"Progress: {curr['completed_days_count']} / {curr['total_program_days']} days, {curr['days_remaining']} days left")
     initial_day = curr['day_order']
 
+    # Explicitly test and handle completed program state
+    if curr.get('is_program_completed') or not curr.get('has_assignment') or curr.get('assignment_status') == 'COMPLETED':
+        print("\n--- 2b. Verifying Completed Program State ---")
+        assert curr.get('is_program_completed') is True
+        assert curr.get('has_assignment') is False
+        assert curr.get('day_order') is None
+        assert len(curr.get('exercises', [])) == 0
+        assert curr.get('completed_days_count') == curr.get('total_program_days')
+        print("Verified clean completed-program state: has_assignment=False, is_program_completed=True, day_order=None, exercises=[]")
+
+        # Verify /workouts/complete cannot be called on a completed program
+        reject_res = client.post(f"{BASE_URL}/workouts/complete", headers=cust_headers, json={
+            "day_order": None,
+            "duration_seconds": 1800,
+            "sets": []
+        })
+        assert reject_res.status_code == 400
+        print(f"Verified /workouts/complete rejection on completed program: {reject_res.json()['detail']}")
+
+        # Reset customer to Day 1 via Admin to test the live completion & sequence progression workflow
+        print("\n--- 2c. Resetting Progress via Admin for Progression Verification ---")
+        admin_login = client.post(f"{BASE_URL}/auth/login", json={
+            "email": "admin@zfit.com",
+            "password": "Admin@123"
+        })
+        assert admin_login.status_code == 200
+        admin_tok = admin_login.json()["access_token"]
+        admin_hdrs = {"Authorization": f"Bearer {admin_tok}"}
+
+        customers_res = client.get(f"{BASE_URL}/admin/customers", headers=admin_hdrs)
+        cust_user = next(c for c in customers_res.json() if c["email"] == "customer@zfit.com")
+
+        reset_res = client.post(
+            f"{BASE_URL}/admin/customers/{cust_user['id']}/reset-progress",
+            headers=admin_hdrs,
+            json={"new_day_order": 1}
+        )
+        assert reset_res.status_code == 200
+        print("Reset customer progress to Day 1.")
+
+        # Re-fetch active workout
+        res = client.get(f"{BASE_URL}/workouts/current", headers=cust_headers)
+        assert res.status_code == 200
+        curr = res.json()
+        assert curr['has_assignment'] is True
+        assert curr['is_program_completed'] is False
+        assert curr['day_order'] == 1
+        initial_day = curr['day_order']
+        print(f"Resumed Active Workout: Day {curr['day_order']} - {curr['day_name']}")
+
     print("\n--- 3. Completing Current Workout ---")
     sets_payload = []
     for ex in curr['exercises']:

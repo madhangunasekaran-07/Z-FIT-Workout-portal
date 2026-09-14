@@ -64,13 +64,38 @@ def get_current_workout(
             .order_by(desc(UserProgram.assigned_at))
             .first()
         )
-        if completed_assignment:
+        if completed_assignment and completed_assignment.status == "COMPLETED":
+            days_rem, status_str = calculate_due_date_status(
+                completed_assignment.due_date,
+                completed_assignment.status
+            )
+            curr_streak, _ = calculate_user_streaks(db, current_user.id)
+            total_days = len(completed_assignment.program.days) if completed_assignment.program else 0
+            completed_logs = db.query(WorkoutLog).filter(
+                WorkoutLog.user_id == current_user.id,
+                WorkoutLog.user_program_id == completed_assignment.id
+            ).count()
+            return CurrentWorkoutOut(
+                has_assignment=False,
+                is_program_completed=True,
+                assignment_status="COMPLETED",
+                program_id=completed_assignment.program_id,
+                program_name=completed_assignment.program.name if completed_assignment.program else None,
+                level_name=completed_assignment.program.level.name if (completed_assignment.program and completed_assignment.program.level) else None,
+                total_program_days=total_days,
+                completed_days_count=max(total_days, completed_logs),
+                days_remaining=days_rem,
+                current_streak=curr_streak,
+                notes="Congratulations! You have completed all scheduled workouts in this program."
+            )
+        elif completed_assignment:
             days_rem, status_str = calculate_due_date_status(
                 completed_assignment.due_date,
                 completed_assignment.status
             )
             return CurrentWorkoutOut(
                 has_assignment=False,
+                is_program_completed=False,
                 assignment_status=completed_assignment.status,
                 program_name=completed_assignment.program.name if completed_assignment.program else None,
                 total_program_days=len(completed_assignment.program.days) if completed_assignment.program else 0,
@@ -80,6 +105,7 @@ def get_current_workout(
             )
         return CurrentWorkoutOut(
             has_assignment=False,
+            is_program_completed=False,
             assignment_status="NO_PROGRAM",
             notes="No workout program has been assigned to your account yet. Please contact your coach/admin."
         )
@@ -88,6 +114,7 @@ def get_current_workout(
     if not program or not program.days:
         return CurrentWorkoutOut(
             has_assignment=False,
+            is_program_completed=False,
             assignment_status="EMPTY_PROGRAM",
             notes="Assigned program contains no scheduled days."
         )
@@ -109,9 +136,11 @@ def get_current_workout(
     if not current_day:
         # User has exceeded all days in program
         assignment.status = "COMPLETED"
+        assignment.completed_at = datetime.now(timezone.utc)
         db.commit()
         return CurrentWorkoutOut(
-            has_assignment=True,
+            has_assignment=False,
+            is_program_completed=True,
             program_id=program.id,
             program_name=program.name,
             level_name=program.level.name if program.level else None,
@@ -183,6 +212,15 @@ def complete_workout(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    assignment = get_active_user_program(db, current_user.id)
+    if not assignment or assignment.status != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No active workout program found to complete. The program may already be completed or not yet assigned."
+        )
+    if completion_data.day_order is None:
+        completion_data.day_order = assignment.current_day_order
+
     try:
         result = advance_workout_progression(db, current_user, completion_data)
         return WorkoutCompletionResponse(

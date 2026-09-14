@@ -15,6 +15,7 @@ from app.api.workouts import router as workouts_router
 from app.api.progress import router as progress_router
 from app.api.exercises import router as exercises_router
 from app.api.admin import router as admin_router
+from app.api.ml import router as ml_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -50,6 +51,7 @@ app.include_router(workouts_router, prefix=settings.API_V1_STR)
 app.include_router(progress_router, prefix=settings.API_V1_STR)
 app.include_router(exercises_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
+app.include_router(ml_router, prefix=settings.API_V1_STR)
 
 @app.get("/api/health")
 def health_check():

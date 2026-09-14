@@ -15,8 +15,10 @@ import {
   Star,
   BookOpen,
   Search,
-  Award
+  Award,
+  Brain,
 } from 'lucide-react';
+import { AIDashboard } from './AIDashboard';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -41,7 +43,7 @@ import {
   PersonalRecord
 } from '../../types';
 
-type ProgressTab = 'overview' | 'volume' | 'exercises' | 'history';
+type ProgressTab = 'overview' | 'volume' | 'exercises' | 'history' | 'ai';
 
 const tooltipStyle = {
   contentStyle: {
@@ -142,6 +144,7 @@ export const ProgressPage: React.FC = () => {
     { id: 'volume', label: 'Volume', icon: <TrendingUp className="w-4 h-4" /> },
     { id: 'exercises', label: 'Exercises', icon: <Dumbbell className="w-4 h-4" /> },
     { id: 'history', label: 'History', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'ai', label: 'AI Insights', icon: <Brain className="w-4 h-4" /> },
   ];
 
   return (
@@ -709,6 +712,12 @@ export const ProgressPage: React.FC = () => {
                 </div>
               )}
             </div>
+          </div>
+        )}
+        {/* AI INSIGHTS TAB */}
+        {activeTab === 'ai' && (
+          <div className="animate-fade-in">
+            <AIDashboard />
           </div>
         )}
       </main>

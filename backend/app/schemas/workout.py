@@ -32,7 +32,7 @@ class SetLogInput(BaseModel):
 
 class WorkoutCompletionRequest(BaseModel):
     program_day_id: Optional[int] = None
-    day_order: int
+    day_order: Optional[int] = None
     duration_seconds: int = 0
     notes: Optional[str] = None
     sets: List[SetLogInput] = []
@@ -118,6 +118,7 @@ class WorkoutExerciseTarget(BaseModel):
 
 class CurrentWorkoutOut(BaseModel):
     has_assignment: bool
+    is_program_completed: bool = False
     program_id: Optional[int] = None
     program_name: Optional[str] = None
     level_name: Optional[str] = None
